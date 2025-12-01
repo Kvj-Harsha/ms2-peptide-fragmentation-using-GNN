@@ -24,17 +24,15 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
         edge_index = batch.edge_index
         graph_batch = batch.batch
 
-        # batch.y is [batch, 1, 78] → squeeze to [batch, 78]
         targets = batch.y.squeeze(1)
         masks = batch.mask.squeeze(1)
 
         safe_targets = targets.clone()
-        safe_targets[~masks] = 0.0  # replace invalid entries
+        safe_targets[~masks] = 0.0
 
-        pred = model(x, edge_index, graph_batch)  # [batch, 78]
+        pred = model(x, edge_index, graph_batch)
 
-        loss_matrix = criterion(pred, safe_targets)  # per-element loss
-
+        loss_matrix = criterion(pred, safe_targets)
         loss = (loss_matrix * masks).sum() / masks.sum()
 
         optimizer.zero_grad()
@@ -54,34 +52,54 @@ def main():
     print("Using device:", device)
 
     # ------------------------------
-    # Load dataset
+    # Load TRAIN dataset (full)
     # ------------------------------
-    train_ds = PepDataset(split="train", num_rows=50000)
+    full_train = PepDataset(split="train", num_rows=150000)
+
+    # ------------------------------
+    # Manual train/val split
+    # ------------------------------
+    train_size = int(0.9 * len(full_train))
+    val_size = len(full_train) - train_size
+
+    train_ds, val_ds = torch.utils.data.random_split(
+        full_train, [train_size, val_size]
+    )
+
+    print(f"Train samples: {len(train_ds)}")
+    print(f"Val samples:   {len(val_ds)}")
+
     train_loader = DataLoader(train_ds, batch_size=32, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=32, shuffle=False)
 
     # ------------------------------
     # Model
     # ------------------------------
     model = PepFragGNN(
         in_dim=21,
-        hidden_dim=64,
-        num_layers=3,
+        hidden_dim=128,
+        num_layers=4,
         out_dim=78
     ).to(device)
 
     criterion = nn.BCELoss(reduction="none")
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=5, eta_min=1e-5
+    )
 
     # ------------------------------
-    # Training Loop
+    # Train
     # ------------------------------
-    EPOCHS = 3
+    EPOCHS = 5
     for epoch in range(1, EPOCHS + 1):
         loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-        print(f"Epoch {epoch}/{EPOCHS} — Loss: {loss:.4f}")
+        scheduler.step()
+
+        print(f"Epoch {epoch}/{EPOCHS} — Train Loss: {loss:.4f}")
 
     # ------------------------------
-    # Save model
+    # Save
     # ------------------------------
     torch.save(model.state_dict(), "fragment_gnn.pt")
     print("\nModel saved as fragment_gnn.pt")
