@@ -1,0 +1,34 @@
+# Headline CleavageGNN configuration (edge-level readout, GCN backbone).
+# Override any field on the CLI, e.g. --model.backbone gat --train.epochs 30
+seed: 42
+device: auto
+out_dir: runs/cleavage_gcn
+
+data:
+  hf_name: bandeiralab/Pep2Prob
+  train_rows: 100000
+  val_rows: 20000
+  test_rows: 20000
+
+graph:
+  use_physchem: true
+  use_position: true
+  use_terminal_flags: true
+  add_charge_carrier_edges: true
+
+model:
+  readout: edge          # 'edge' (CleavageGNN) or 'pool' (ablation)
+  backbone: gcn          # gcn | gat | gin
+  hidden_dim: 128
+  num_layers: 4
+  dropout: 0.1
+  use_charge_embedding: true
+
+train:
+  epochs: 20
+  batch_size: 32
+  lr: 0.001
+  weight_decay: 0.0001
+  loss: bce              # bce | mse | spectral_angle
+  amp: true
+  early_stop_patience: 5

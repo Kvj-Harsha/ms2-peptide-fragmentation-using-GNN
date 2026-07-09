@@ -1,0 +1,51 @@
+(.venv) PS C:\Users\kvjha\Desktop\projects\ms2-peptide-fragmentation-using-GNN> python scripts/reproduce.py --quick                                                                                                        
+                            
+$ C:\Users\kvjha\Desktop\projects\ms2-peptide-fragmentation-using-GNN\.venv\Scripts\python.exe scripts/run_baselines.py --data.train_rows 500 --data.val_rows 100 --data.test_rows 100 --train.epochs 2
+data_split/train_test_split_set_1/test_i(…): 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 32.8M/32.8M [00:15<00:00, 2.19MB/s]
+C:\Users\kvjha\Desktop\projects\ms2-peptide-fragmentation-using-GNN\.venv\Lib\site-packages\huggingface_hub\file_download.py:139: UserWarning: `huggingface_hub` cache-system uses symlinks by default to efficiently store duplicated files but your machine does not support them in C:\Users\kvjha\.cache\huggingface\hub\datasets--bandeiralab--Pep2Prob. Caching files will still work but in a degraded version that might require more space on your disk. This warning can be disabled by setting the `HF_HUB_DISABLE_SYMLINKS_WARNING` environment variable. For more details, see https://huggingface.co/docs/huggingface_hub/how-to-cache#limitations.
+To support symlinks on Windows, you either need to activate Developer Mode or to run Python as an administrator. In order to activate developer mode, see this article: https://docs.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development
+  warnings.warn(message)
+data_split/train_test_split_set_1/train_(…): 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 115M/115M [00:30<00:00, 3.72MB/s]
+data_split/train_test_split_set_2/test_i(…): 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 32.8M/32.8M [00:13<00:00, 2.52MB/s]
+data_split/train_test_split_set_2/train_(…): 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 115M/115M [00:30<00:00, 3.80MB/s]
+data_split/train_test_split_set_3/test_i(…): 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 33.0M/33.0M [00:09<00:00, 3.34MB/s]
+data_split/train_test_split_set_3/train_(…): 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 115M/115M [00:31<00:00, 3.62MB/s]
+data_split/train_test_split_set_4/test_i(…): 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 33.1M/33.1M [00:09<00:00, 3.43MB/s]
+data_split/train_test_split_set_4/train_(…): 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 114M/114M [00:33<00:00, 3.37MB/s]
+data_split/train_test_split_set_5/test_i(…): 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 33.0M/33.0M [00:10<00:00, 3.19MB/s]
+data_split/train_test_split_set_5/train_(…): 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 115M/115M [00:28<00:00, 4.09MB/s]
+Generating train split: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3148198/3148198 [00:13<00:00, 237338.13 examples/s]
+Generating test split: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3148198/3148198 [00:20<00:00, 156575.36 examples/s]
+Fitting Global baseline...
+[Global]      SA=0.6956±0.0853  L1=0.2367  MSE=0.0976  Acc=0.7373  Sens=0.9991  Spec=0.1081  (n=100)
+Training Bag-of-AA MLP...
+[Bag-of-AA]   SA=0.6787±0.0914  L1=0.2797  MSE=0.1080  Acc=0.7062  Sens=1.0000  Spec=0.0000  (n=100)
+Baseline results written to results/baseline_results.csv
+
+$ C:\Users\kvjha\Desktop\projects\ms2-peptide-fragmentation-using-GNN\.venv\Scripts\python.exe scripts/train.py --config configs/cleavage_gcn.yaml --model.readout edge --out_dir runs/edge_gcn --data.train_rows 500 --data.val_rows 100 --data.test_rows 100 --train.epochs 2
+Device: cpu | readout=edge backbone=gcn
+Train peptides: 500 | Val peptides: 100
+Parameters: 155,538 total (155,538 trainable)
+Epoch 01/2 | loss=0.6680 | val SA=0.6060±0.0943  L1=0.3083  MSE=0.1484  Acc=0.6863  Sens=1.0000  Spec=0.0000  (n=100)                                                                                                     
+Epoch 02/2 | loss=0.5851 | val SA=0.6436±0.0793  L1=0.2955  MSE=0.1221  Acc=0.6863  Sens=1.0000  Spec=0.0000  (n=100)                                                                                                     
+
+Best val SA=0.6436. Checkpoint saved to runs\edge_gcn\model.pt
+
+$ C:\Users\kvjha\Desktop\projects\ms2-peptide-fragmentation-using-GNN\.venv\Scripts\python.exe scripts/evaluate.py --ckpt runs/edge_gcn/model.pt
+[test] SA=0.6454±0.0890  L1=0.2994  MSE=0.1273  Acc=0.7062  Sens=1.0000  Spec=0.0000  (n=100)
+Appended results to results/main_results.csv
+
+$ C:\Users\kvjha\Desktop\projects\ms2-peptide-fragmentation-using-GNN\.venv\Scripts\python.exe scripts/train.py --config configs/cleavage_gcn.yaml --model.readout pool --out_dir runs/pool_gcn --data.train_rows 500 --data.val_rows 100 --data.test_rows 100 --train.epochs 2
+Device: cpu | readout=pool backbone=gcn
+Train peptides: 500 | Val peptides: 100
+Parameters: 97,614 total (97,614 trainable)
+Epoch 01/2 | loss=0.5714 | val SA=0.6847±0.0783  L1=0.2406  MSE=0.0989  Acc=0.6863  Sens=1.0000  Spec=0.0000  (n=100)                                                                                                     
+Epoch 02/2 | loss=0.4941 | val SA=0.6908±0.0756  L1=0.2377  MSE=0.0936  Acc=0.6863  Sens=1.0000  Spec=0.0000  (n=100)                                                                                                     
+
+Best val SA=0.6908. Checkpoint saved to runs\pool_gcn\model.pt
+
+$ C:\Users\kvjha\Desktop\projects\ms2-peptide-fragmentation-using-GNN\.venv\Scripts\python.exe scripts/evaluate.py --ckpt runs/pool_gcn/model.pt
+[test] SA=0.6924±0.0897  L1=0.2462  MSE=0.1004  Acc=0.7062  Sens=1.0000  Spec=0.0000  (n=100)
+Appended results to results/main_results.csv
+
+Done. See results/ for the metrics CSVs (edge vs pool vs baselines).

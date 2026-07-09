@@ -1,165 +1,153 @@
-# Peptide Fragment Ion Probability Prediction Using Graph Neural Networks
+# CleavageGNN — Peptide Fragment-Ion Probability Prediction with Graph Neural Networks
 
-> Find the complete project report [here](https://drive.google.com/file/d/1_ysWikHUgiRHcbV-RSbOgolb0iYWr8IS/view?usp=sharing)
+A cleavage-site-centric graph neural network for predicting **b/y fragment-ion
+probabilities** on the [Pep2Prob](https://huggingface.co/datasets/bandeiralab/Pep2Prob)
+benchmark (608,780 precursors aggregated from ~183M spectra).
 
-## Abstract
+Rather than pooling a peptide into a single vector and predicting every position
+from shared MLP weights, **CleavageGNN predicts each fragment at its cleavage-site
+edge** — aligning the model's inductive bias with the physics of backbone
+dissociation. See `RESEARCH_PLAN.md` and `PROJECT_REVIEW.md` for the scientific
+motivation and the rationale behind this reformulation.
 
-Mass spectrometry (MS) is a foundational technology in modern proteomics, enabling the identification and characterization of peptides through tandem mass spectrometry (MS/MS). Accurate prediction of peptide fragment ion probabilities is critical for improving peptide–spectrum matching, scoring functions, and protein identification pipelines.
+---
 
-This project presents a Graph Neural Network (GNN)–based framework for predicting b-ion and y-ion fragment probabilities directly from peptide sequences. Peptides are represented as graphs, where amino acids form nodes and peptide bonds define edges, allowing the model to capture both local and global structural dependencies.
+## Why edge-level?
 
-The model is trained on the large-scale Pep2Prob benchmark dataset and produces probability distributions across 78 fragment ion channels. An interactive Streamlit-based visualization platform is provided to inspect predicted fragmentation patterns in real time.
+For a peptide of length `L` and precursor charge `z`, each cleavage site
+`k ∈ {1..L-1}` produces a b-ion (`b_k`) and a y-ion (`y_{L-k}`). CleavageGNN reads
+each site out from its own bond:
 
-<img width="806" height="443" alt="image" src="https://github.com/user-attachments/assets/307ab053-a470-4a58-ba77-366555e4b70d" />
+```
+y_k = MLP([ h_k, h_{k+1}, h_k ⊙ h_{k+1}, |h_k − h_{k+1}|, ctx, emb(z) ])
+```
 
-## 1. Introduction
+where `h_k` are GNN node embeddings, `ctx` is a pooled global context, and
+`emb(z)` is the precursor-charge embedding. The pooled global-mean model is kept
+as the **headline ablation** (`--model.readout pool`) to isolate the value of the
+edge formulation.
 
-In MS/MS experiments, peptide precursor ions are fragmented to generate sequence-specific ions, primarily b-ions (N-terminal fragments) and y-ions (C-terminal fragments). The relative intensities of these ions are central to peptide identification and scoring in database search engines.
+---
 
-Traditional fragmentation prediction methods rely on rule-based heuristics or simplified physical models, which struggle to capture the complex biochemical factors governing peptide fragmentation. Recent advances in deep learning, particularly graph-based models, provide a powerful alternative for learning these nonlinear dependencies from large-scale data.
+## Project structure
 
-This project explores the use of Graph Neural Networks to model peptide fragmentation, leveraging the structured nature of peptide sequences and demonstrating strong predictive performance.
+```
+pepfraggnn/                 installable package (single source of truth)
+├── config.py               all hyperparameters (dataclass + argparse/YAML)
+├── seed.py                 reproducibility (seeds, device)
+├── metrics.py              Spectral Angle, L1, MSE, type-2 accuracy
+├── losses.py               masked BCEWithLogits / MSE / spectral-angle
+├── engine.py               shared train / eval loops (edge & pool readouts)
+├── utils.py                param counting, CSV logging
+├── data/
+│   ├── features.py         AA vocab (20 + explicit UNK) + physicochemistry
+│   ├── graph.py            peptide → graph (L=1 guard, charge-carrier edges)
+│   ├── targets.py          length-derived masking (no −1.0 sentinel)
+│   ├── loader.py           seeded uniform-random subsampling / official folds
+│   └── dataset.py          PyG dataset (edge + pooled targets, charge)
+├── models/                 GNN backbones (GCN/GAT/GIN), CleavageGNN, PooledGNN
+└── baselines/              Global mean profile, Bag-of-AA MLP
+scripts/                    train.py, evaluate.py, run_baselines.py, predict.py, reproduce.py
+configs/                    YAML run configs
+app/                        Streamlit demo (+ optional LLM narration)
+tests/                      pytest unit + integration tests
+```
 
-<img width="667" height="729" alt="image" src="https://github.com/user-attachments/assets/0b1de429-781a-4258-9edd-f46c8876fd8f" />
+---
 
-## 2. Problem Statement
+## Setup (virtual environment)
 
-How can a deep learning model accurately predict peptide fragment ion probabilities directly from amino acid sequences, without requiring raw mass spectrometry spectra, while generalizing across diverse peptide lengths and compositions?
+```bash
+python -m venv .venv
+# Windows PowerShell:   .venv\Scripts\Activate.ps1
+# Git Bash / macOS/Linux: source .venv/bin/activate
 
-## 3. Objectives
+# PyTorch: pick the build for your machine
+pip install torch --index-url https://download.pytorch.org/whl/cpu     # CPU
+# pip install torch --index-url https://download.pytorch.org/whl/cu121 # CUDA 12.1
 
-The primary objectives of this project are:
+pip install -r requirements.txt
+pip install -e .          # optional: install pepfraggnn as a package
+```
 
-1. To preprocess the Pep2Prob dataset and convert peptide sequences into graph representations.
-2. To design and implement a GNN architecture for fragment ion probability prediction.
-3. To train and evaluate the model using appropriate loss functions and correlation metrics.
-4. To deploy the trained model through a user-friendly Streamlit interface.
-5. To visualize predicted fragment probabilities using interpretable plots and tabular outputs.
+---
 
-## 4. Dataset
+## Usage
 
-This project uses the Pep2Prob benchmark dataset, a large-scale curated resource designed for fragment ion probability prediction in proteomics.
+**Fully offline smoke test (no download) — runs the model end-to-end on synthetic data:**
+```bash
+pytest -q
+```
 
-### Dataset Characteristics
+**Smoke-test the real pipeline** (downloads Pep2Prob on first run, then subsamples to a few hundred rows):
+```bash
+python scripts/reproduce.py --quick
+```
 
-- 610,117 unique peptide precursors
-- Derived from over 183 million high-resolution MS/MS spectra
-- Provides fragment probability vectors for up to 235 possible fragment ions
-- Leakage-free train–test split to ensure unbiased evaluation
+**Reproduce baselines** (Global mean profile + Bag-of-AA MLP):
+```bash
+python scripts/run_baselines.py --config configs/cleavage_gcn.yaml
+```
 
-In this implementation, a subset of the dataset is used, focusing on b1–b39 and y1–y39 ions.
+**Train the edge-level model / pooled ablation:**
+```bash
+python scripts/train.py --config configs/cleavage_gcn.yaml --model.readout edge --out_dir runs/edge_gcn
+python scripts/train.py --config configs/cleavage_gcn.yaml --model.readout pool --out_dir runs/pool_gcn
+```
 
-## 5. Methodology
+**Evaluate a checkpoint** (writes `results/main_results.csv`):
+```bash
+python scripts/evaluate.py --ckpt runs/edge_gcn/model.pt
+```
 
-### 5.1 Peptide Graph Construction
+**Predict for a single peptide:**
+```bash
+python scripts/predict.py --ckpt runs/edge_gcn/model.pt --peptide PEPTIDER
+```
 
-Each peptide is represented as a graph:
+**Interactive demo:**
+```bash
+streamlit run app/streamlit_app.py -- --ckpt runs/edge_gcn/model.pt
+```
 
-- Nodes: Amino acids
-- Edges: Peptide bonds between adjacent residues
-- Node Features: 21-dimensional one-hot vectors (20 standard amino acids + unknown token)
+Any config field is overridable on the CLI with dotted flags, e.g.
+`--model.backbone gat --train.epochs 30 --train.loss spectral_angle`.
 
-This representation preserves sequential and structural relationships between residues.
+---
 
-### 5.2 Model Architecture
+## Evaluation
 
-The proposed model, referred to as PepFragGNN, consists of:
+Metrics follow the Pep2Prob benchmark so results are comparable to its published
+baselines:
 
-- Multiple graph convolution (GCN) layers with ReLU activation
-- Global mean pooling to obtain a fixed-size graph embedding
-- A multi-layer perceptron (MLP) regression head
-- Sigmoid activation to produce probabilities in the range [0, 1]
+- **Spectral Angle (SA)** — headline metric, reported with per-peptide std.
+- **L1** and **MSE** — regression error over valid fragments.
+- **Type-2** accuracy / sensitivity / specificity at τ=0.001.
 
-Architecture Overview:
+The old inflated per-peptide Pearson is deliberately **not** used as a headline
+(see `PROJECT_REVIEW.md` §2.5).
 
-Peptide Sequence  
-→ Graph Construction  
-→ GNN Backbone (GCN Layers)  
-→ Global Mean Pooling  
-→ MLP Head  
-→ Fragment Ion Probabilities  
+---
 
-### 5.3 Training Procedure
+## Reproducibility notes
 
-The model is trained using:
+- **One source of truth** for hyperparameters (`pepfraggnn/config.py`); every
+  checkpoint stores its own config, so train/eval architecture can never diverge.
+- **Fixed seeds** across Python / NumPy / Torch; subsampling is seeded and
+  uniform-random (not a biased first-N slice).
+- **Node features:** 20 canonical amino acids **+ an explicit UNK channel**, plus
+  physicochemical scalars, normalized position, and terminal flags.
+- Model stays **< 1M parameters** (asserted in the tests) for laptop-scale training.
 
-- Loss Function: Masked Binary Cross-Entropy (BCE)
-- Optimizer: Adam (learning rate = 1 × 10⁻³)
-- Batch Size: 32
-- Epochs: 5
-- Hardware: NVIDIA GPU
+Run the tests:
+```bash
+pytest -q
+```
 
-Masked loss ensures that fragment positions exceeding peptide length do not contribute to the loss.
+---
 
-Loss Function:
+## Scope note
 
-L = sum(BCE(y_pred, y_true) × mask) / sum(mask)
-
-<img width="914" height="826" alt="image" src="https://github.com/user-attachments/assets/4e1abb9b-e2f2-445b-9273-8a858ad9d0ab" />
-
-## 6. Evaluation
-
-The model is evaluated on a held-out validation set using:
-
-- Binary Cross-Entropy Loss
-- Pearson Correlation Coefficient
-
-Performance Summary:
-
-- Validation BCE Loss: approximately 0.39
-- Mean Pearson Correlation: approximately 0.82
-
-These results indicate strong agreement between predicted and true fragment ion probabilities.
-
-<img width="853" height="842" alt="image" src="https://github.com/user-attachments/assets/3206a9de-97f5-49ff-82a3-8e975ade735c" />
-
-## 7. Visualization and Deployment
-
-An interactive Streamlit application is provided to:
-
-- Accept peptide sequences as input
-- Perform real-time fragment probability prediction
-- Visualize results using line plots, mirror plots, and tabular views
-- Export predictions as CSV files
-
-This enables rapid exploration of peptide fragmentation behavior without requiring MS/MS experiments.
-
-<img width="666" height="261" alt="image" src="https://github.com/user-attachments/assets/0bcbfe95-e5b3-4d62-83ea-32273ba62c9c" />
-
-<img width="562" height="542" alt="image" src="https://github.com/user-attachments/assets/d1710b91-5cb9-40e0-8712-79c92b5f6f7a" />
-
-
-## 8. Repository Structure
-
-.
-├── src/
-├── test-programs/
-├── train.py
-├── eval.py
-├── predict.py
-├── predict_cli_version.py
-├── fragment_gnn.pt
-├── requirements.txt
-├── plan.md
-└── README.md
-
-## 9. Limitations and Future Work
-
-Current limitations include:
-
-- Prediction limited to b1 and y1 ions
-- Single charge state modeling
-- One-hot amino acid encoding
-
-Future extensions may include:
-
-- Higher charge states and neutral-loss ions
-- Richer node features using physicochemical properties
-- Instrument-specific fragmentation modeling
-- Distributed training and inference
-
-## 10. Conclusion
-
-This project demonstrates that Graph Neural Networks are effective for modeling peptide fragmentation in MS/MS proteomics. By treating peptides as structured graphs, the proposed approach captures meaningful biochemical dependencies and achieves strong predictive performance.
-
-The integration of a complete training, evaluation, and deployment pipeline highlights the practical applicability of graph-based deep learning in computational proteomics.
+The Streamlit demo and optional LLM narration are a **usability bonus**, not a
+research claim. The LLM key is read only from `GROQ_API_KEY` in the environment
+and is never stored in source.

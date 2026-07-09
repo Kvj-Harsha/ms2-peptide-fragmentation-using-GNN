@@ -1,1 +1,25 @@
+# Environments
+.venv/
+venv/
+env/
+
+# Secrets
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Data / runs / results
+.cache/
+hf_cache/
+runs/
+results/
+*.pt
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
